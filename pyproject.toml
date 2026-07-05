@@ -1,0 +1,70 @@
+[project]
+name = "cogneelearn"
+version = "0.1.0"
+description = "RAG knowledge-base assistant on Cognee with local LLM (llama-server) and DuckDB/TPC-H dependencies."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+
+dependencies = [
+    # Core RAG framework. Version pins keep the local-setup behaviour stable
+    # (openai_compatible embedding engine, kuzu/lancedb defaults).
+    "cognee==1.2.2",
+    # TPC-H dataset generation + object/dependency extraction from a file-backed DB.
+    "duckdb==1.5.4",
+    # Document loaders: docx text extraction (Cognee handles md/txt/pdf natively,
+    # but docx needs an explicit extractor).
+    "python-docx>=1.1.2,<2",
+    # Structured logging for the assistant pipeline.
+    "structlog>=24.4.0,<25",
+    # CLI/UI layer.
+    "streamlit>=1.40.0,<2",
+    "python-dotenv>=1.0.1,<2",
+    # HTTP helper to sanity-check the llama-server endpoint at startup.
+    "httpx>=0.27.0,<1",
+]
+
+[project.optional-dependencies]
+# Linter/formatter/type-checker kept out of the runtime install.
+dev = [
+    "ruff>=0.7.0,<1",
+    "mypy>=1.13.0,<2",
+]
+
+[project.scripts]
+# Convenience entrypoints so the app can be launched via `uv run` or `python -m`.
+cogneelearn-ui = "cogneelearn.ui:main"
+cogneelearn-ingest = "cogneelearn.ingest.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Only ship the package directory; data/ and .cognee_* stay local.
+packages = ["src/cogneelearn"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".cognee_data", ".cognee_system", "data"]
+
+[tool.ruff.lint]
+# Keep it pragmatic for a learning project: bugs + style + imports.
+select = ["E", "F", "I", "W", "B", "UP"]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true
+# cognee ships no stubs; don't fail the build on its untyped surface.
+ignore_missing_imports = true
+exclude = "^(\\.cognee_data|\\.cognee_system|data)/"
+
+[[tool.mypy.overrides]]
+module = ["duckdb.*", "cognee.*", "docx.*", "streamlit.*"]
+ignore_missing_imports = true
