@@ -50,7 +50,7 @@ def _load_llm_settings() -> LLMSettings:
     return LLMSettings(
         endpoint=os.environ.get("LLM_ENDPOINT", "http://127.0.0.1:1234/v1"),
         api_key=os.environ.get("LLM_API_KEY", "."),
-        model=os.environ.get("LLM_MODEL", "openai/qwen3.6-27b-mtp"),
+        model=os.environ.get("LLM_MODEL", "openai/qwen3.6-35b-a3b-mtp"),
     )
 
 

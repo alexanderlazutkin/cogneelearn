@@ -16,7 +16,7 @@ dependencies = [
     # but docx needs an explicit extractor).
     "python-docx>=1.1.2,<2",
     # Structured logging for the assistant pipeline.
-    "structlog>=24.4.0,<25",
+    "structlog>=25.2.0,<26",
     # CLI/UI layer.
     "streamlit>=1.40.0,<2",
     "python-dotenv>=1.0.1,<2",

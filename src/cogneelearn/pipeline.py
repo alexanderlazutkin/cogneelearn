@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,24 @@ logger = logging.getLogger(__name__)
 
 TPCH_DATASET = "tpch_schema"
 DOCS_DATASET = "docs"
+
+
+def _data_per_batch(default: int = 2) -> int:
+    """Конкурентность cognify: число параллельных задач по чанкам.
+
+    Cognee хардкодит ``data_per_batch=20`` в ``cognee.cognify()`` и не читает
+    его из env. При ``parallel=1`` в llama-server это вызывает отмену запросов
+    сервером ("Connection handling canceled") — 20 задач встают в очередь к
+    1 слоту.
+
+    Пробрасываем значение через ``COGNEE_DATA_PER_BATCH`` (по умолчанию 2 —
+    соответствует ``parallel=2`` сервера). Поставьте 1, если в сервере
+    ``parallel=1``.
+    """
+    try:
+        return max(1, int(os.getenv("COGNEE_DATA_PER_BATCH", str(default))))
+    except ValueError:
+        return default
 
 
 @dataclass
@@ -99,7 +118,7 @@ async def ingest_tpch(
     try:
         await cognee.add([d.text for d in docs], dataset_name=dataset)
         if cognify:
-            await cognee.cognify(datasets=dataset)
+            await cognee.cognify(datasets=dataset, data_per_batch=_data_per_batch())
     except Exception as exc:  # noqa: BLE001
         logger.exception("TPC-H ingestion failed")
         return IngestResult(dataset=dataset, items_added=len(docs), ok=False, error=str(exc))
@@ -136,7 +155,7 @@ async def ingest_documents(
         for doc in loaded:
             await _add_one(doc, dataset)
         if cognify:
-            await cognee.cognify(datasets=dataset)
+            await cognee.cognify(datasets=dataset, data_per_batch=_data_per_batch())
     except Exception as exc:  # noqa: BLE001
         logger.exception("Document ingestion failed")
         return IngestResult(dataset=dataset, items_added=len(loaded), ok=False, error=str(exc))

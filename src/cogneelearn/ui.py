@@ -216,7 +216,9 @@ def _do_ingest_uploads(uploads) -> None:
 async def _cognify_docs() -> None:
     import cognee
 
-    await cognee.cognify(datasets=P.DOCS_DATASET)
+    # data_per_batch берётся из COGNEE_DATA_PER_BATCH (по умолчанию 2).
+    # См. pipeline._data_per_batch() — синхронизировано с parallel в llama-server.
+    await cognee.cognify(datasets=P.DOCS_DATASET, data_per_batch=P._data_per_batch())
 
 
 def _do_prune() -> None:
