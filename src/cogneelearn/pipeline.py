@@ -274,6 +274,138 @@ async def search_graph(
     )
 
 
+# ─── Graph inspection ─────────────────────────────────────────────────────────
+@dataclass
+class GraphSubgraph:
+    """A k-hop neighborhood around a seed node, serialized for the UI."""
+
+    nodes: list[dict[str, Any]]
+    edges: list[dict[str, Any]]
+    seed: str | None = None
+
+
+@dataclass
+class GraphSubgraphRaw:
+    """Raw cognee-format neighborhood for the cognee HTML renderer.
+
+    ``graph_data`` is the ``(nodes, edges)`` tuple exactly as produced by
+    ``GraphDBInterface.get_neighborhood`` (and consumed by
+    ``cognee_network_visualization``): nodes = ``List[(id, props)]``,
+    edges = ``List[(src, tgt, rel, props)]``.
+    """
+
+    graph_data: tuple[list[Any], list[Any]]
+    seed: str | None = None
+    node_count: int = 0
+    edge_count: int = 0
+
+
+def _resolve_seed_id(graph_engine: Any, token: str) -> str | None:
+    """Resolve a user-entered name/id to a graph node id.
+
+    Entity nodes use ``identity_fields=["name"]``, so ``Entity.id_for(name)``
+    is the deterministic node id. Non-Entity nodes (TextDocument, DocumentChunk,
+    EntityType) may use random UUIDs, so we fall back to a Cypher ``CONTAINS``
+    lookup over ``Node.name``.
+    """
+    import uuid
+
+    from cognee.modules.engine.models.Entity import Entity
+    from cognee.modules.engine.models.EntityType import EntityType
+
+    # Already a UUID? Assume it is a node id as-is.
+    try:
+        uuid.UUID(str(token))
+        return str(token)
+    except (ValueError, AttributeError):
+        pass
+
+    for model in (Entity, EntityType):
+        try:
+            seed_id = str(model.id_for(token))
+            return seed_id
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+async def _resolve_and_fetch(
+    node: str, depth: int
+) -> tuple[str | None, list[Any], list[Any]]:
+    """Shared seed resolution + neighborhood fetch used by both subgraph APIs."""
+    from cognee.infrastructure.databases.graph import get_graph_engine
+
+    depth = max(1, min(3, int(depth)))
+    graph_engine = await get_graph_engine()
+
+    seed_id = _resolve_seed_id(graph_engine, node)
+    if seed_id is None:
+        return None, [], []
+
+    exists = await graph_engine.get_node(seed_id)
+    if exists is None:
+        rows = await graph_engine.query(
+            "MATCH (n:Node) WHERE n.name CONTAINS $frag RETURN n.id LIMIT 1",
+            {"frag": node},
+        )
+        if not rows:
+            return None, [], []
+        seed_id = str(rows[0][0])
+
+    nodes, edges = await graph_engine.get_neighborhood([seed_id], depth=depth)
+
+    if not nodes:
+        seed_node = await graph_engine.get_node(seed_id)
+        if seed_node is None:
+            return seed_id, [], []
+        nodes = [(seed_id, seed_node)]
+
+    return seed_id, nodes, edges
+
+
+async def extract_subgraph(node: str, depth: int = 1) -> GraphSubgraph:
+    """Return the k-hop neighborhood of a graph node as UI-friendly data.
+
+    Resolves ``node`` (a name or a UUID-like id) to a seed id, then calls
+    ``graph_engine.get_neighborhood``. Returns empty lists if the node is not
+    found. ``depth`` is clamped to 1–3 to keep the subgraph legible.
+    """
+    seed_id, nodes, edges = await _resolve_and_fetch(node, depth)
+
+    ui_nodes = [
+        {
+            "id": nid,
+            "label": props.get("name") or nid,
+            "type": props.get("type"),
+            "description": props.get("description"),
+        }
+        for nid, props in nodes
+    ]
+    ui_edges = [
+        {"source": src, "target": tgt, "label": rel}
+        for src, tgt, rel, _props in edges
+    ]
+    return GraphSubgraph(nodes=ui_nodes, edges=ui_edges, seed=seed_id)
+
+
+async def extract_subgraph_raw(node: str, depth: int = 1) -> GraphSubgraphRaw:
+    """Return the k-hop neighborhood in cognee's native ``(nodes, edges)`` tuple.
+
+    The returned ``graph_data`` is directly consumable by
+    ``cognee.modules.visualization.cognee_network_visualization``, so the cognee
+    HTML renderer (Story/Schema/Memory tabs) can render a *neighborhood* rather
+    than the full graph — keeping the payload small regardless of total graph
+    size. ``depth`` is clamped to 1–3.
+    """
+    seed_id, nodes, edges = await _resolve_and_fetch(node, depth)
+    return GraphSubgraphRaw(
+        graph_data=(nodes, edges),
+        seed=seed_id,
+        node_count=len(nodes),
+        edge_count=len(edges),
+    )
+
+
 # ─── helpers ──────────────────────────────────────────────────────────────────
 def _extract_entry_text(entry: Any) -> str:
     """Pull a human-readable string out of a recall/search entry."""

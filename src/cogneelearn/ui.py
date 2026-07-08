@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from cogneelearn import assistant as A
 from cogneelearn import pipeline as P
@@ -43,6 +44,7 @@ def main() -> None:
     _render_sidebar()
     _render_chat()
     _render_datasets_panel()
+    _render_graph_panel()
 
 
 def _render_sidebar() -> None:
@@ -163,6 +165,80 @@ def _render_datasets_panel() -> None:
             return
         for name in datasets:
             st.markdown(f"- `{name}`")
+
+
+# Порог предупреждения о тяжёлом подграфе (узлы).
+_GRAPH_HEAVY_THRESHOLD = 2000
+
+
+def _render_graph_panel() -> None:
+    """Cognee HTML graph viewer over a k-hop neighborhood of a chosen object.
+
+    Renders the cognee native HTML visualization (Story/Schema/Memory tabs) but
+    feeds it ``get_neighborhood`` output instead of the full graph, so the
+    payload stays small regardless of total graph size.
+    """
+    with st.expander("Граф Cognee", expanded=False):
+        c1, c2 = st.columns([3, 1])
+        default_node = st.session_state.get("graph_focus", "")
+        node_input = c1.text_input(
+            "Объект (имя сущности)",
+            value=default_node,
+            key="graph_node_input",
+            placeholder="например: customer, orders, lineitem…",
+        )
+        depth = c2.slider("Глубина", min_value=1, max_value=3, value=1, key="graph_depth")
+        height = st.slider(
+            "Высота области, px",
+            min_value=400,
+            max_value=1200,
+            value=750,
+            step=50,
+            key="graph_height",
+        )
+
+        col_a, col_b = st.columns([1, 3])
+        render = col_a.button("Показать граф", type="primary", key="graph_show_btn")
+        if col_b.button("Сбросить фокус", key="graph_reset_btn"):
+            st.session_state.pop("graph_focus", None)
+            st.rerun()
+
+        if not node_input or not render:
+            st.caption("Введите имя объекта и нажмите «Показать граф».")
+            return
+
+        try:
+            sub: P.GraphSubgraphRaw = P.run(P.extract_subgraph_raw(node_input, depth=depth))
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Не удалось получить граф: {exc}")
+            return
+
+        if sub.node_count == 0:
+            st.warning(f"Объект «{node_input}» не найден в графе.")
+            return
+
+        st.caption(
+            f"Узлов: {sub.node_count} · Рёбер: {sub.edge_count} · "
+            f"окрестность глубины {depth}. cognee HTML: вкладки Graph/Schema/Memory."
+        )
+
+        if sub.node_count > _GRAPH_HEAVY_THRESHOLD:
+            st.warning(
+                f"Подграф содержит {sub.node_count} узлов — рендеринг может быть "
+                f"медленным. Снизьте глубину или выберите более узкий объект."
+            )
+
+        try:
+            from cognee.modules.visualization.cognee_network_visualization import (
+                cognee_network_visualization,
+            )
+
+            html = P.run(cognee_network_visualization(sub.graph_data))
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Рендеринг графа не удался: {exc}")
+            return
+
+        components.html(html, height=height, scrolling=True)
 
 
 # ─── ingest actions ───────────────────────────────────────────────────────────
