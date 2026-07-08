@@ -219,3 +219,5 @@ __marimo__/
 
 # Custom
 data/
+.cognee_data/
+.cognee_system/

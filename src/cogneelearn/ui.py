@@ -15,8 +15,8 @@ from pathlib import Path
 
 import streamlit as st
 
-from . import assistant as A
-from . import pipeline as P
+from cogneelearn import assistant as A
+from cogneelearn import pipeline as P
 
 logger = logging.getLogger("cogneelearn.ui")
 

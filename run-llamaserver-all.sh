@@ -46,7 +46,7 @@ model = /media/lan/LLM/Models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-U
 mmproj = /media/lan/LLM/Models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/mmproj-F32.gguf
 n-gpu-layers = 99
 n-gpu-layers-draft = 99
-parallel = 1
+parallel = 2
 ctx-size = 200000
 cache-type-k = q8_0
 cache-type-v = q8_0
@@ -63,7 +63,7 @@ load-on-startup = true
 [qwen3-embedding-8b-q8]
 model = /media/lan/LLM/Models/Qwen/Qwen3-Embedding-8B-GGUF/Qwen3-Embedding-8B-Q8_0.gguf
 n-gpu-layers = 99
-parallel = 1
+parallel = 2
 ctx-size = 32768
 cache-type-k = q8_0
 cache-type-v = q8_0
